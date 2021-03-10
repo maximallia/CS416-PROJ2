@@ -48,27 +48,23 @@ typedef struct threadControlBlock {
 	ucontext_t *ctx;
 	rpthread_t tid;
 
-	int status; //ready,scheduled,blocked
+	void *value_ptr; //need this for join
 
-	int thread_level;
+	//made it into a global var instead
+	//int status; //ready,scheduled,blocked
 
 	// YOUR CODE HERE
 } curtcb; 
 
-/* mutex struct definition */
-typedef struct rpthread_mutex_t {
-	/* add something here */
-
-	// YOUR CODE HERE
-} rpthread_mutex_t;
 
 /* define your data structures here: */
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
 // YOUR CODE HERE
 typedef struct tNode{
+	int thread_level; //for priority
 	struct tNode* nextNode; 
-	tcb curtcb; 
+	curtcb curtcb; 
 }tNode; 
 
 typedef struct tQueue{
@@ -77,13 +73,32 @@ typedef struct tQueue{
 }tQueue; 
 
 
+/* mutex struct definition */
+typedef struct rpthread_mutex_t {
+	/* add something here */
+
+	int init;
+	//lock for tNode
+	int lock; //1=lock, 0=unlocked
+	//lock for tQueue
+	int lockQueue;
+
+	tQueue *wait;
+
+	// YOUR CODE HERE
+} rpthread_mutex_t;
+
+
 /* Function Declarations: */
 
+int searchQ(rpthread_t tid, tQueue *queue);
+
+
 /* append onto queue*/
-void enqueue(tNode* newNode);
+void enqueue(tNode* newNode, tQueue *queue);
 
 /* remove from front of queue */
-void dequeue();
+tNode* dequeue(tQueue *queue);
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, void
@@ -110,6 +125,10 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex);
 
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
+
+void init_schedule();
+
+static void schedule();
 
 #ifdef USE_RTHREAD
 #define pthread_t rpthread_t
