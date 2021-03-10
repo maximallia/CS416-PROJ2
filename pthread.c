@@ -6,6 +6,23 @@
 
 #include "rpthread.h"
 
+//PSEUDOCODE:
+/*
+1.start program
+2. main run
+3. main call rpthread_create
+4. in phtread_create, init scheduler+ timer+ sighandlers+ etc
+5. create contect for new thread+ current funning funct (main)
+6. getcontect for both, makecontext for new thread (allocate stack)
+7. create scheduler (optional), place in some queues and return with pthread_create
+8. main still running
+9. timer interrupt
+10. save context into main context
+11.swap scheduler (with swapcontext)
+
+
+*/
+
 // INITAILIZE ALL YOUR VARIABLES HERE
 // YOUR CODE HERE
 
