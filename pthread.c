@@ -37,7 +37,19 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
        // after everything is all set, push this thread int
        // YOUR CODE HERE
 	
-    return 0;
+    	//if queue is empty, ie. this is the first thread, then we need to add the caller to the queue. This means that there needs to be a context made for the caller 
+	tNode* node = malloc(sizeof(tNode*));
+	node->curtcb.tid = thread; 
+	
+	node->curtcb.ctx = malloc(sizeof(ucontext_t*));
+	getcontext(node->curtcb.ctx);
+	node->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
+	node->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
+	//memset(node->curtcb.ctx->uc_stack.ss_sp, '/0', SIGSTKSZ);
+	makecontext(node->curtcb.ctx, *function, arg);
+	
+	enqueue(node);
+    	return 0;
 };
 
 /* give CPU possession to other user-level threads voluntarily */
