@@ -6,6 +6,9 @@
 
 #include "rpthread.h"
 
+#include<sys/time.h>
+#include<signal.h>
+
 //PSEUDOCODE:
 /*
 1.start program
@@ -30,13 +33,23 @@ tQueue *exitQueue;
 
 tQueue *joinQueue;
 
-//tQueue *waitQueue;//this one is for mutex, i added it in the struct of mutex
+tQueue *waitQueue;//this one is for mutex
 
 
 tNode *currentNode = NULL;
 
-//when do we use BLOCKED
+
 int status = -1; //0:ready, 1:scheduled,2:blocked
+
+//var to use in schedule
+int freeCalled = 0; // if 1, run free
+int mutexCalled = 0; //if 1, run mutex func
+int exitCalled = 0; //if 1, run exit func
+int joinCalled = 0; //if 1, run join func
+
+//int parentAdded = 0; //if 1, there is parent
+
+struct itimerval tv; //timer
 
 /* create a new thread */
 int rpthread_create(rpthread_t * thread, pthread_attr_t * attr, 
@@ -122,15 +135,12 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 
 
 		//connect child node to target queue according to global var status
-		if(status==READY){
-			tQueue *targetQueue = readyQueue;
-			enqueue(child, targetQueue);
+		enqueue(child, readyQueue);
 
-		}
 
 		return 0;
 	}
-};
+}
 
 /* give CPU possession to other user-level threads voluntarily */
 
@@ -147,9 +157,11 @@ int rpthread_yield() {
 	// YOUR CODE HERE
 
 	//using swapcontext()
-	status = SCHEDULED; //change from ready->schedule
+	//status = SCHEDULED; //change from ready->schedule
 
+	resetTime();
 
+	schedule();
 
 	return 0;
 };
@@ -169,13 +181,15 @@ void rpthread_exit(void *value_ptr) {
 	*/
 
 
+	resetTime();
+
 	//searchQ is looking for the threads that called join on it
 	//thus search through joinQ
 	//the function would remove the node from joinQ and enqueue it to readyQ
 	if(searchQ(currentNode->curtcb.tid, joinQueue)==0){
 
 		dequeue(readyQueue);//remove head from readyqueue
-		
+		freeCalled = 1;//thread exited from readyQ
 	}
 
 	else if(searchQ(currentNode->curtcb.tid, joinQueue) == -1){ //not found
@@ -191,6 +205,8 @@ void rpthread_exit(void *value_ptr) {
 	//or value_ptr is not found, we add the value to currentNdoe's value_ptr
 	currentNode->curtcb.value_ptr = value_ptr;
 
+	exitCalled = 1; //to show exit funct called, so do not equeue readyQ
+	schedule();
 }
 
 
@@ -202,7 +218,7 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
   
 	// YOUR CODE HERE
 
-	
+	resetTime();
 
 	/*
 	for this, i am search for the tid in the exitQueue,
@@ -218,17 +234,20 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 		currentNode->curtcb.tid = thread;
 		dequeue(readyQueue);//remove from readyqueue
 		enqueue(currentNode, joinQueue);//added to joinQueue
+
+		joinCalled=1;
+
+		schedule();
 	}
 
 	//WE NEED SCHEDULE
-	schedule();
+	
 
 	return 0;
-};
+}
 
 /* initialize the mutex lock */
-int rpthread_mutex_init(rpthread_mutex_t *mutex, 
-                          const pthread_mutexattr_t *mutexattr) {
+int rpthread_mutex_init(rpthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr) {
 	//initialize data structures for this mutex
 
 	// YOUR CODE HERE
@@ -241,8 +260,8 @@ int rpthread_mutex_init(rpthread_mutex_t *mutex,
 	mutex->wait->head = NULL;
 	mutex->wait->tail = NULL;
 
-	return 0;
-};
+	return 0 ;
+}
 
 /* aquire the mutex lock */
 int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
@@ -252,6 +271,33 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
         // context switch to the scheduler thread
 
         // YOUR CODE HERE
+
+		if(mutex->init!=1){//mutex not yet initialized
+			printf("ERROR: MUTEX not initialized");
+			return -999;
+		}
+		
+		while( __sync_lock_test_and_set(&mutex->lock, 1) == 1){//LOCKED
+
+			mutex->lockQueue = 1; //lock the Qlock
+
+			if(mutex->lock == 1) {//if mutex is locked
+
+				dequeue(readyQueue);//remove head from readyQ
+				enqueue(currentNode, mutex->wait);//enqueue the currentNode to mutex's wait
+
+				mutex->lockQueue= 0; //unlock mutex's Qlock
+
+				mutexCalled = 1;
+
+				schedule();//run scheduler
+
+			}
+			else{//is mutex is unlocked, we unlock mutex's Qlock
+				mutex->lockQueue = 0; //opens the mutex waitQ
+			}
+		}
+
         return 0;
 };
 
@@ -262,6 +308,21 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 	// so that they could compete for mutex later.
 
 	// YOUR CODE HERE
+
+
+	mutex->lockQueue = 1;//lock queue first, to stop new q's entering
+	//create node from waitQ's head
+
+	tNode *waitHead = dequeue(mutex->wait);
+
+	mutex->lockQueue = 0; //unlock the waitQ, to make changes
+
+	if(waitHead != NULL){//there exists thread in waitQ
+
+		enqueue(waitHead, readyQueue);
+		//append waitHead to readyQueue
+	}
+
 	return 0;
 };
 
@@ -270,8 +331,26 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex) {
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex) {
 	// Deallocate dynamic memory created in rpthread_mutex_init
 
+	//we want to dump everything in mutex waitQ onto readyQ
+	tNode *waitHead = mutex->wait->head;
+
+	while(waitHead != NULL){
+
+		enqueue(waitHead, readyQueue);
+
+		waitHead = waitHead->nextNode;
+	}
+
+	free(mutex->wait);//free the entire waitQ
+
+	//to destroy, undo init_mutex
+	mutex->init = 0;
+	mutex->lock = 0;
+	mutex->lockQueue=0;
+	mutex->wait = NULL;
+
 	return 0;
-};
+}
 
 // search funct, join needs enqueue, exit needs to free nodes
 int searchQ(rpthread_t tid, tQueue *queue){
@@ -368,20 +447,73 @@ static void schedule() {
 
 	// YOUR CODE HERE
 
-// schedule policy
-#ifndef MLFQ
-	// Choose RR
-     // CODE 1
-#else 
-	// Choose MLFQ
-     // CODE 2
-#endif
+	//if join,exit,mutex, we do not equeue, cause function already added equeue
+	//else, we equeue the tail of readyQ, cause the pthread was added to readyQ
+	//for our algorithm adds nodes to the tail, but because the three Q were not changed,
+	//the tail would be the 'first' node to be processed
+	
+	//setup for new thread input
+	if(joinCalled==1) joinCalled = 0;
+	
+	else if(exitCalled==1) exitCalled = 0;
+
+	else if(mutexCalled==1) mutexCalled=0;
+
+	else{
+		tNode *curr = dequeue(readyQueue);
+		enqueue(curr, readyQueue);
+	}
+
+
+	tNode *firstNode = readyQueue->head;
+
+	if(firstNode == NULL){
+		//if null means no thread processed
+		printf("ERROR, no top thread node found in readyQ\n");
+		return;
+	}
+
+	//if equal then parent.tid is the firstNode in readyQ
+	if(firstNode->curtcb.tid == currentNode->curtcb.tid){
+
+		if(firstNode->nextNode != NULL){
+			firstNode = firstNode->nextNode;
+			//move firstNode to nextNode in readyQ
+			// this is later used to free
+		}
+	}
+
+	tNode *temp = currentNode;//currentNode is parent
+	currentNode = firstNode;//move current to first node
+
+	if(freeCalled==1){//exiting thread freed
+		//different form searchQ, we free node in exitQ
+		//here we are freeing temp
+		free(temp);
+		freeCalled = 0;
+		setContext(firstNode->curtcb.ctx);
+	}
+	else{//swap temp's context with firstNode
+
+		swapcontext(temp->curtcb.ctx, firstNode->curtcb.ctx);
+	}
+
+	// schedule policy
+	//PART2
+	#ifndef MLFQ
+		// Choose RR
+		// CODE 1
+	#else 
+		// Choose MLFQ
+		// CODE 2
+	#endif
 
 }
 
 //Append tNode to the end of tQueue
 void enqueue(tNode* newNode, tQueue *queue){
 
+	newNode->nextNode=NULL;
 	if(queue->head == NULL){//empty queue
 		queue->head = newNode;
 		queue->tail = newNode;
@@ -420,7 +552,7 @@ tNode* dequeue(tQueue *queue){
 }
 
 
-//for init Runner
+//for init queue
 void starter(tQueue *queue){
 
 	queue = malloc(sizeof(tQueue));
@@ -439,8 +571,24 @@ void init_schedule(){
 	starter(exitQueue);
 
 
+	//signal for alarm
+	signal(SIGALRM, sighandler);
 }
 
+void sighandler(int signum){//from 
+	printf("Caught signal %d, schedule starting...]\n", signum);
+	schedule();
+}
+
+void resetTime(){
+
+	//setup time
+	tv.it_value.tv_sec= 0;
+	tv.it_value.tv_usec = 0;
+
+	tv.it_interval = tv.it_value;
+	//setup complete!
+}
 
 
 /* Round Robin (RR) scheduling algorithm */
@@ -449,6 +597,7 @@ static void sched_rr() {
 	// (feel free to modify arguments and return types)
 
 	// YOUR CODE HERE
+
 }
 
 /* Preemptive MLFQ scheduling algorithm */
