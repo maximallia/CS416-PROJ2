@@ -85,20 +85,12 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		//set up thread node parent
 		tNode* parent= malloc(sizeof(tNode*));
 		parent->nextNode = NULL;
+		parent->jTids = NULL;
 
 		//define curtcb for parent
 		//i added a '*,' error without *
-		parent->curtcb.tid = *thread; 
-		parent->curtcb.ctx = malloc(sizeof(ucontext_t*));
 
 		getcontext(parent->curtcb.ctx);
-
-		parent->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
-		parent->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
-		//memset(node->curtcb.ctx->uc_stack.ss_sp, '/0', SIGSTKSZ);
-
-		//link new context to parent's curtcb .ctx
-		makecontext(parent->curtcb.ctx, *function, arg);
 
 		init_schedule();
 
@@ -107,8 +99,25 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 
 		//add parent tnode to queque
 		enqueue(parent, readyQueue);
+		
+		//create child node
+		tNode* child= malloc(sizeof(tNode*));
+		child->nextNode = NULL;
+		child->jTids = NULL;
 
+		child->curtcb.tid = *thread; 
+		child->curtcb.ctx = malloc(sizeof(ucontext_t*));
+
+		getcontext(child->curtcb.ctx);
+		child->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
+		child->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
+		child->curtcb.ctx->uc_link = 0; 
+		makecontext(child->curtcb.ctx, *function, arg);
+	
+		parent->curtcb.ctx->uc_link = child->curtcb.ctx; 
+		enqueue(child, readyQueue);
 		schedule();
+
 		//we need to make this function
 		//though the schdule is for partII, but for now we can treat it as the runner
 
@@ -119,21 +128,22 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		//create child node
 		tNode* child= malloc(sizeof(tNode*));
 		child->nextNode = NULL;
-
+		child->jTids = NULL;
 		child->curtcb.tid = *thread; 
 		child->curtcb.ctx = malloc(sizeof(ucontext_t*));
 
 		getcontext(child->curtcb.ctx);
-
 		child->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
 		child->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
-
+		child->curtcb.ctx->uc_link = 0; 
 		makecontext(child->curtcb.ctx, *function, arg);
 
-
 		//connect child node to target queue according to global var status
-		enqueue(child, readyQueue);
+		if(status==READY){
+			tQueue *targetQueue = readyQueue;
+			enqueue(child, targetQueue);
 
+		}
 
 		return 0;
 	}
