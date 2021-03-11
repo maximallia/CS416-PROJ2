@@ -6,9 +6,6 @@
 
 #include "rpthread.h"
 
-#include<sys/time.h>
-#include<signal.h>
-
 //PSEUDOCODE:
 /*
 1.start program
