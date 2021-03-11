@@ -64,7 +64,7 @@ typedef struct threadControlBlock {
 
 // YOUR CODE HERE
 typedef struct tidNode{
-	tidNode* next; 
+	struct tidNode* next; 
 	rpthread_t tid; 
 }tidNode; 
 
