@@ -32,9 +32,8 @@
 // what i added
 #include <ucontext.h>
 #include <string.h>
-#include<sys/time.h>
-#include<signal.h>
-
+#include <signal.h>
+#include <sys/time.h>
 
 typedef uint rpthread_t;
 
@@ -47,11 +46,10 @@ typedef struct threadControlBlock {
 	// thread priority
 	// And more ...
 
-	ucontext_t *ctx;
-	rpthread_t tid;
+	rpthread_t tid; 
 
 	void *value_ptr; //need this for join
-
+	ucontext_t* ctx;
 	//made it into a global var instead
 	//int status; //ready,scheduled,blocked
 
@@ -134,6 +132,11 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex);
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 
+int searchExitQueue(rpthread_t tid);
+
+void remove_joinlist();
+
+void compare_joinlist(tNode* node);
 
 void sighandler();
 
