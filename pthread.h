@@ -61,9 +61,15 @@ typedef struct threadControlBlock {
 // Feel free to add your own auxiliary data structures (linked list or queue etc...)
 
 // YOUR CODE HERE
+typedef struct tidNode{
+	tidNode* next; 
+	rpthread_t tid; 
+}tidNode; 
+
 typedef struct tNode{
 	int thread_level; //for priority
-	struct tNode* nextNode; 
+	struct tNode* nextNode;
+	tidNode* jTids; //list of joined threads 
 	curtcb curtcb; 
 }tNode; 
 
