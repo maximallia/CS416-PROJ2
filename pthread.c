@@ -61,7 +61,6 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 
 	/*
 	tNode* node = malloc(sizeof(tNode*));
-
 	//i added a '*,' error without *
 	node->curtcb.tid = *thread; 
 	
@@ -112,7 +111,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		child->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
 		child->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
 		child->curtcb.ctx->uc_link = 0; 
-		makecontext(child->curtcb.ctx, *function, arg);
+		makecontext(child->curtcb.ctx, function, arg);
 	
 		parent->curtcb.ctx->uc_link = child->curtcb.ctx; 
 		enqueue(child, readyQueue);
@@ -136,7 +135,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		child->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
 		child->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
 		child->curtcb.ctx->uc_link = 0; 
-		makecontext(child->curtcb.ctx, *function, arg);
+		makecontext(child->curtcb.ctx, function, arg);
 
 		//connect child node to target queue according to global var status
 		if(status==READY){
@@ -237,13 +236,10 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 /*
 	if(searchQ(thread, exitQueue)== -1){
 	//thread id is not found in exitqueue, meaning we remove node from readyQ, and add to joinQ
-
 		currentNode->curtcb.tid = thread;
 		dequeue(readyQueue);//remove from readyqueue
 		enqueue(currentNode, joinQueue);//added to joinQueue
-
 		joinCalled=1;
-
 		schedule();
 	}
 */
@@ -513,7 +509,7 @@ static void schedule() {
 		//here we are freeing temp
 		free(temp);
 		freeCalled = 0;
-		setContext(firstNode->curtcb.ctx);
+		setcontext(firstNode->curtcb.ctx);
 	}
 	else{//swap temp's context with firstNode
 
