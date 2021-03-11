@@ -234,7 +234,7 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	*/
 
 	//we will search exitQueue to see if target thread (with tid) has been exited
-
+/*
 	if(searchQ(thread, exitQueue)== -1){
 	//thread id is not found in exitqueue, meaning we remove node from readyQ, and add to joinQ
 
@@ -246,11 +246,26 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 
 		schedule();
 	}
+*/
+		//makes new node and sets its tid to the one that we are waiting for 
+	tidNode* newNode = malloc(sizeof(tidNode*));
+	newNode->tid = thread;
 
+	//if list of joined tids is empty
+	if(currentNode->jTids == NULL){
+		currentNode->jTids = newNode; 
+
+	//insert onto the front
+	} else {
+		newNode->next = currentNode->jTids; 
+		currentNode->jTids = newNode->next; 
+	}
 	//WE NEED SCHEDULE
-	
+	joinCalled = 1; 
+	schedule();
 
 	return 0;
+	//WE NEED SCHEDULE
 }
 
 /* initialize the mutex lock */
