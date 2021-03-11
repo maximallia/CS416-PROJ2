@@ -126,9 +126,14 @@ int rpthread_mutex_unlock(rpthread_mutex_t *mutex);
 /* destroy the mutex */
 int rpthread_mutex_destroy(rpthread_mutex_t *mutex);
 
+
+void sighandler();
+
 void init_schedule();
 
 static void schedule();
+
+void resetTime();
 
 #ifdef USE_RTHREAD
 #define pthread_t rpthread_t
