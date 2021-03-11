@@ -35,7 +35,7 @@ tQueue *waitQueue;//this one is for mutex
 
 tNode *currentNode = NULL;
 
-
+int firstThread = 1;
 int status = -1; //0:ready, 1:scheduled,2:blocked
 
 //var to use in schedule
@@ -76,16 +76,17 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 	//WE WILL NEED TO MAKE THE SCHEDULER, and INIT_SCHEDULER
 
 	//if queue empty
-	if(readyQueue->head == NULL){
+	if(firstThread == 1){
 
 		status = READY; //make status into ready
 
 		//tNode* parent= malloc(sizeof(tNode*));
 		//set up thread node parent
 		tNode* parent= malloc(sizeof(tNode*));
+		parent->curtcb.ctx = malloc(sizeof(ucontext_t*));
 		parent->nextNode = NULL;
 		parent->jTids = NULL;
-
+		parent->curtcb.tid = 0; 
 		//define curtcb for parent
 		//i added a '*,' error without *
 
@@ -101,10 +102,12 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		
 		//create child node
 		tNode* child= malloc(sizeof(tNode*));
+		child->curtcb.ctx = malloc(sizeof(ucontext_t*));
+
 		child->nextNode = NULL;
 		child->jTids = NULL;
 
-		child->curtcb.tid = *thread; 
+		child->curtcb.tid = thread; 
 		child->curtcb.ctx = malloc(sizeof(ucontext_t*));
 
 		getcontext(child->curtcb.ctx);
@@ -128,7 +131,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		tNode* child= malloc(sizeof(tNode*));
 		child->nextNode = NULL;
 		child->jTids = NULL;
-		child->curtcb.tid = *thread; 
+		child->curtcb.tid = thread; 
 		child->curtcb.ctx = malloc(sizeof(ucontext_t*));
 
 		getcontext(child->curtcb.ctx);
@@ -233,34 +236,31 @@ int rpthread_join(rpthread_t thread, void **value_ptr) {
 	*/
 
 	//we will search exitQueue to see if target thread (with tid) has been exited
-/*
+
 	if(searchQ(thread, exitQueue)== -1){
 	//thread id is not found in exitqueue, meaning we remove node from readyQ, and add to joinQ
-		currentNode->curtcb.tid = thread;
-		dequeue(readyQueue);//remove from readyqueue
+		currentNode = dequeue(readyQueue);//remove from readyqueue
 		enqueue(currentNode, joinQueue);//added to joinQueue
-		joinCalled=1;
-		schedule();
-	}
-*/
+
 		//makes new node and sets its tid to the one that we are waiting for 
-	tidNode* newNode = malloc(sizeof(tidNode*));
-	newNode->tid = thread;
+		tidNode* newNode = malloc(sizeof(tidNode*));
+		newNode->tid = thread;
 
-	//if list of joined tids is empty
-	if(currentNode->jTids == NULL){
-		currentNode->jTids = newNode; 
+		//if list of joined tids is empty
+		if(currentNode->jTids == NULL){
+			currentNode->jTids = newNode; 
 
-	//insert onto the front
-	} else {
-		newNode->next = currentNode->jTids; 
-		currentNode->jTids = newNode->next; 
+		//insert onto the front
+		} else {
+			newNode->next = currentNode->jTids; 
+			currentNode->jTids = newNode->next; 
+		}
+		//WE NEED SCHEDULE
+		joinCalled = 1; 
+		schedule();
+
+		return 0;
 	}
-	//WE NEED SCHEDULE
-	joinCalled = 1; 
-	schedule();
-
-	return 0;
 	//WE NEED SCHEDULE
 }
 
@@ -446,8 +446,61 @@ int searchQ(rpthread_t tid, tQueue *queue){
 	return -1;
 }
 
+//return 1 when tid is found in exit queue, 0 otherwise 
+int searchExitQueue(rpthread_t tid){
+	tNode* cur = exitQueue->head; 
+	
+	while(cur != NULL){
+		if(cur->curtcb.tid == tid){
+			return 1; 
+		}
+		cur = cur->nextNode; 
+	}
+	return 0; 
+}
 
+void remove_joinlist(tidNode** head, tidNode* toRemove){
+	if((*head)->tid == toRemove->tid){
+		free(head);
+		*head = (*head)->next;  
+		return; 
+	}
 
+	tidNode *cur = (*head)->next, *prev = (*head); 
+	while(cur != NULL){
+		if(cur->tid == toRemove->tid){
+			toRemove->next = cur->next; 
+			free(cur); 
+			break; 
+		}
+		prev = cur; 
+		cur = cur->next; 		
+	}
+}
+
+//compares list of threads the node is waiting on to exitQueue, if found in exitQueue this means that thread is done so remove from node's joinList
+void compare_joinlist(tNode* node){
+	tidNode* head = node->jTids; 
+	if(head == NULL){
+		return; 
+	}
+
+	//not waiting on any threads
+	if(head == NULL){
+		return; 
+	}
+
+	//remove all tids found in exitQueue
+	tidNode* cur = head; 
+	while(cur != NULL){
+		if(searchExitQueue(cur->tid)){
+			//remove from jtids
+			remove_joinlist(&head, cur);
+			return; 
+		}
+		cur = cur->next; 
+	}
+}
 
 /* scheduler */
 static void schedule() {
@@ -482,6 +535,14 @@ static void schedule() {
 		enqueue(curr, readyQueue);
 	}
 
+	//if threads are waiting for others to finish 
+	if(joinQueue->head != NULL){
+		compare_joinlist(joinQueue->head);
+		if(joinQueue->head->jTids == NULL){
+			tNode* temp = dequeue(joinQueue); 
+			enqueue(temp, readyQueue);
+		}
+	}
 
 	tNode *firstNode = readyQueue->head;
 
@@ -569,7 +630,6 @@ tNode* dequeue(tQueue *queue){
 	return deqNode;//we can just treat this as a void
 }
 
-
 //for init queue
 void starter(tQueue *queue){
 
@@ -582,12 +642,17 @@ void starter(tQueue *queue){
 //initializes out queues
 void init_schedule(){
 
-	starter(readyQueue);
-
-	starter(joinQueue);
-
-	starter(exitQueue);
-
+	readyQueue = malloc(sizeof(tQueue)); 
+	readyQueue->head = NULL; 
+	readyQueue->tail = NULL; 
+	
+	exitQueue = malloc(sizeof(tQueue)); 
+	exitQueue->head = NULL; 
+	exitQueue->tail = NULL; 
+	
+	joinQueue = malloc(sizeof(tQueue));
+	exitQueue->head = NULL; 
+	exitQueue->tail = NULL; 
 
 	//signal for alarm
 	signal(SIGALRM, sighandler);
