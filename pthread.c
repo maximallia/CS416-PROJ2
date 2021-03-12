@@ -1,5 +1,7 @@
 // File:	rpthread.c
 
+// File:	rpthread.c
+
 // List all group member's name:
 // username of iLab:
 // iLab Server:
@@ -114,7 +116,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		child->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
 		child->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
 		child->curtcb.ctx->uc_link = 0; 
-		makecontext(child->curtcb.ctx, function, arg);
+		makecontext(child->curtcb.ctx, (void*)function,1, arg);
 	
 		parent->curtcb.ctx->uc_link = child->curtcb.ctx; 
 		enqueue(child, readyQueue);
@@ -138,7 +140,7 @@ int rpthread_create(rpthread_t * thread, pthread_attr_t * attr,
 		child->curtcb.ctx->uc_stack.ss_size = SIGSTKSZ;
 		child->curtcb.ctx->uc_stack.ss_sp = malloc(SIGSTKSZ); 
 		child->curtcb.ctx->uc_link = 0; 
-		makecontext(child->curtcb.ctx, function, arg);
+		makecontext(child->curtcb.ctx, (void*)function,1, arg);
 
 		//connect child node to target queue according to global var status
 		if(status==READY){
