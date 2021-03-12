@@ -1,7 +1,5 @@
 // File:	rpthread.c
 
-// File:	rpthread.c
-
 // List all group member's name:
 // username of iLab:
 // iLab Server:
@@ -288,7 +286,7 @@ int rpthread_mutex_lock(rpthread_mutex_t *mutex) {
         // use the built-in test-and-set atomic function to test the mutex
         // if the mutex is acquired successfully, enter the critical section
         // if acquiring mutex fails, push current thread into block list and //  
-        // context switch to the scheduler thread
+        // context ` to the scheduler thread
 
         // YOUR CODE HERE
 
@@ -576,7 +574,9 @@ static void schedule() {
 	}
 	else{//swap temp's context with firstNode
 
-		swapcontext(temp->curtcb.ctx, firstNode->curtcb.ctx);
+		if(swapcontext(temp->curtcb.ctx, firstNode->curtcb.ctx) == -1){
+			printf("AHHHH");
+		}
 	}
 
 	// schedule policy
@@ -601,7 +601,9 @@ void enqueue(tNode* newNode, tQueue *queue){
 	}
 	else{
 		queue->tail->nextNode = newNode;
+		queue->tail->curtcb.ctx->uc_link = queue->tail->nextNode->curtcb.ctx;
 		queue->tail = queue->tail->nextNode;
+		
 	}
 
 }
